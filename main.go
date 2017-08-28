@@ -58,7 +58,7 @@ func main() {
 
 	st := sshterm.New(config)
 
-	st.Handler = NewGameBoard
+	st.Handler = NewGameRunner
 
 	st.Listen(listener)
 }
@@ -80,7 +80,7 @@ func (ta *TermAdapter) Clear(bg imterm.Attribute) {
 	ta.Term.Clear(tb.ColorDefault, tb.Attribute(bg))
 }
 
-type GameBoard struct {
+type GameRunner struct {
 	Term *tb.Termbox
 	B    *Board
 	it   *imterm.Imterm
@@ -92,13 +92,15 @@ type GameBoard struct {
 	gamewidth  string
 	gameheight string
 	gamemines  string
+	username   string
+	gameover   bool
 }
 
-func NewGameBoard(term *tb.Termbox) sshterm.Term {
+func NewGameRunner(term *tb.Termbox, sshConn *ssh.ServerConn) sshterm.Term {
 	term.SetInputMode(tb.InputEsc | tb.InputMouse)
-
+	log.Printf("%s connected", sshConn.User())
 	it, _ := imterm.New(&TermAdapter{term})
-	gb := &GameBoard{
+	gr := &GameRunner{
 		Term:    term,
 		refresh: make(chan struct{}, 2),
 		it:      it,
@@ -108,24 +110,25 @@ func NewGameBoard(term *tb.Termbox) sshterm.Term {
 		gamewidth:  "20",
 		gameheight: "20",
 		gamemines:  "30",
+		username:   sshConn.User(),
 	}
 
-	go gb.Run()
+	go gr.Run()
 
-	return gb
+	return gr
 }
 
-func (gb *GameBoard) Resize(w, h int) {
-	if gb.neww != w || gb.newh != h {
-		gb.neww, gb.newh = w, h
-		gb.Refresh()
+func (gr *GameRunner) Resize(w, h int) {
+	if gr.neww != w || gr.newh != h {
+		gr.neww, gr.newh = w, h
+		gr.Refresh()
 	}
 }
 
-func (gb *GameBoard) Run() {
+func (gr *GameRunner) Run() {
 	go func() {
 		for {
-			e := gb.Term.PollEvent()
+			e := gr.Term.PollEvent()
 			switch e.Type {
 			case tb.EventMouse:
 				button := imterm.MouseNone
@@ -143,37 +146,36 @@ func (gb *GameBoard) Run() {
 				case tb.MouseWheelDown:
 					button = imterm.MouseWheelDown
 				}
-				gb.it.Mouse(e.MouseX, e.MouseY, button)
+				gr.it.Mouse(e.MouseX, e.MouseY, button)
 			case tb.EventKey:
-				gb.it.Keyboard(imterm.Key(e.Key), e.Ch)
+				gr.it.Keyboard(imterm.Key(e.Key), e.Ch)
 			}
-			gb.Refresh()
+			gr.Refresh()
 		}
 	}()
-	gb.Refresh()
-	for range gb.refresh {
-		gb.Term.Resize(gb.neww, gb.newh)
-		gb.it.Start()
-
-		if gb.B == nil {
-			gb.gamewidth = gb.it.Input(10, 3, "Width", gb.gamewidth)
-			gb.it.SameLine()
-			gb.gameheight = gb.it.Input(10, 3, "Height", gb.gameheight)
-			gb.gamemines = gb.it.Input(20, 3, "Mines", gb.gamemines)
-			if gb.it.Button(20, 3, "Start") {
-				w, err := strconv.Atoi(gb.gamewidth)
+	gr.Refresh()
+	for range gr.refresh {
+		gr.Term.Resize(gr.neww, gr.newh)
+		gr.it.Start()
+		if gr.B == nil {
+			gr.gamewidth = gr.it.Input(10, 3, "Width", gr.gamewidth)
+			gr.it.SameLine()
+			gr.gameheight = gr.it.Input(10, 3, "Height", gr.gameheight)
+			gr.gamemines = gr.it.Input(20, 3, "Mines", gr.gamemines)
+			if gr.it.Button(20, 3, "Start") {
+				w, err := strconv.Atoi(gr.gamewidth)
 				if err != nil {
-					gb.it.Finish()
+					gr.it.Finish()
 					continue
 				}
-				h, err := strconv.Atoi(gb.gameheight)
+				h, err := strconv.Atoi(gr.gameheight)
 				if err != nil {
-					gb.it.Finish()
+					gr.it.Finish()
 					continue
 				}
-				mines, err := strconv.Atoi(gb.gamemines)
+				mines, err := strconv.Atoi(gr.gamemines)
 				if err != nil {
-					gb.it.Finish()
+					gr.it.Finish()
 					continue
 				}
 				buf := make([]byte, 8)
@@ -184,59 +186,69 @@ func (gb *GameBoard) Run() {
 					seed += int64(buf[l1])
 				}
 				r := mrand.New(mrand.NewSource(seed))
-				gb.B = NewBoard(w, h, mines, r)
-				gb.it.ClearState()
+				gr.B = NewBoard(w, h, mines, r)
+				log.Printf("%s started a game: %d x %d, %d mines", w, h, mines)
+				gr.gameover = false
+				gr.it.ClearState()
 			}
 		} else {
-			width := gb.B.Width + 2
-			if width+20 > gb.it.TermW {
-				width = gb.it.TermW - 20
+			width := gr.B.Width + 2
+			if width+20 > gr.it.TermW {
+				width = gr.it.TermW - 20
 			}
-			height := gb.B.Height + 2
-			if height > gb.it.TermH {
-				height = gb.it.TermH
+			height := gr.B.Height + 2
+			if height > gr.it.TermH {
+				height = gr.it.TermH
 			}
 
-			gb.it.StartColumns(width)
-			x, y, click := gb.it.Buffer(width, height, "Board", gb.B.Render())
+			gr.it.StartColumns(width)
+			x, y, click := gr.it.Buffer(width, height, "Board", gr.B.Render())
 			if click == imterm.MouseLeft {
-				gb.B.Reveal(x, y)
-				gb.Refresh()
+				gr.B.Reveal(x, y)
+				gr.Refresh()
 			}
 			if click == imterm.MouseRight {
-				gb.B.Flag(x, y)
-				gb.Refresh()
+				gr.B.Flag(x, y)
+				gr.Refresh()
 			}
-			gb.it.NextColumn(20)
-			switch gb.B.State {
+			gr.it.NextColumn(20)
+			switch gr.B.State {
 			case Won:
-				gb.it.Text(20, 3, "", "You Won!")
-				if gb.it.Button(20, 3, "Leave") {
-					gb.B = nil
-					gb.it.ClearState()
-					gb.Refresh()
+				gr.it.Text(20, 3, "", "You Won!")
+				if !gr.gameover {
+					log.Printf("%s won a game!")
+					gr.gameover = true
+				}
+				if gr.it.Button(20, 3, "Leave") {
+					gr.B = nil
+					gr.it.ClearState()
+					gr.Refresh()
 				}
 			case Lost:
-				gb.it.Text(20, 3, "", "You Lost")
-				if gb.it.Button(20, 3, "Leave") {
-					gb.B = nil
-					gb.it.ClearState()
-					gb.Refresh()
+				gr.it.Text(20, 3, "", "You Lost")
+				if !gr.gameover {
+					log.Printf("%s lost a game!")
+					gr.gameover = true
+				}
+				if gr.it.Button(20, 3, "Leave") {
+					gr.B = nil
+					gr.it.ClearState()
+					gr.Refresh()
 				}
 			default:
-				gb.it.Text(20, 3, "Mines", fmt.Sprintf("%d", gb.B.Mines))
-				gb.it.Text(20, 3, "Flags", fmt.Sprintf("%d", gb.B.GetFlags()))
+				gr.it.Text(20, 3, "Mines", fmt.Sprintf("%d", gr.B.Mines))
+				gr.it.Text(20, 3, "Flags", fmt.Sprintf("%d", gr.B.GetFlags()))
 			}
-			gb.it.FinishColumns()
+			gr.it.FinishColumns()
 		}
 
-		gb.it.Finish()
+		gr.it.Finish()
 	}
 }
 
-func (gb *GameBoard) Refresh() {
+func (gr *GameRunner) Refresh() {
 	select {
-	case gb.refresh <- struct{}{}:
+	case gr.refresh <- struct{}{}:
 	default:
 	}
 }
