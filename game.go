@@ -163,13 +163,15 @@ func (b *Board) Reveal(x, y int) {
 	for len(queue) > 0 {
 		cur := queue[len(queue)-1]
 		queue = queue[0 : len(queue)-1]
-		b.Neighbors(cur.x, cur.y, false, func(x, y int) {
-			ncell := b.Get(x, y)
-			if !ncell.Revealed && !ncell.Mine {
-				ncell.Revealed = true
-				queue = append(queue, Pos{x, y})
-			}
-		})
+		if b.GetNeighborCount(cur.x, cur.y) == 0 {
+			b.Neighbors(cur.x, cur.y, true, func(x, y int) {
+				ncell := b.Get(x, y)
+				if !ncell.Revealed && !ncell.Mine {
+					ncell.Revealed = true
+					queue = append(queue, Pos{x, y})
+				}
+			})
+		}
 	}
 	b.checkWin()
 	return
