@@ -187,7 +187,7 @@ func (gr *GameRunner) Run() {
 				}
 				r := mrand.New(mrand.NewSource(seed))
 				gr.B = NewBoard(w, h, mines, r)
-				log.Printf("%s started a game: %d x %d, %d mines", w, h, mines)
+				log.Printf("%s started a game: %d x %d, %d mines", gr.username, w, h, mines)
 				gr.gameover = false
 				gr.it.ClearState()
 			}
@@ -216,7 +216,7 @@ func (gr *GameRunner) Run() {
 			case Won:
 				gr.it.Text(20, 3, "", "You Won!")
 				if !gr.gameover {
-					log.Printf("%s won a game!")
+					log.Printf("%s won a game!", gr.username)
 					gr.gameover = true
 				}
 				if gr.it.Button(20, 3, "Leave") {
@@ -227,7 +227,7 @@ func (gr *GameRunner) Run() {
 			case Lost:
 				gr.it.Text(20, 3, "", "You Lost")
 				if !gr.gameover {
-					log.Printf("%s lost a game!")
+					log.Printf("%s lost a game!", gr.username)
 					gr.gameover = true
 				}
 				if gr.it.Button(20, 3, "Leave") {
