@@ -107,9 +107,9 @@ func NewGameRunner(term *tb.Termbox, sshConn *ssh.ServerConn) sshterm.Term {
 		neww:    80,
 		newh:    40,
 
-		gamewidth:  "20",
-		gameheight: "20",
-		gamemines:  "30",
+		gamewidth:  "30",
+		gameheight: "24",
+		gamemines:  "150",
 		username:   sshConn.User(),
 	}
 
