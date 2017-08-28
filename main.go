@@ -94,6 +94,8 @@ type GameRunner struct {
 	gamemines  string
 	username   string
 	gameover   bool
+
+	sshConn *ssh.ServerConn
 }
 
 func NewGameRunner(term *tb.Termbox, sshConn *ssh.ServerConn) sshterm.Term {
@@ -111,6 +113,7 @@ func NewGameRunner(term *tb.Termbox, sshConn *ssh.ServerConn) sshterm.Term {
 		gameheight: "24",
 		gamemines:  "150",
 		username:   sshConn.User(),
+		sshConn:    sshConn,
 	}
 
 	go gr.Run()
@@ -191,6 +194,9 @@ func (gr *GameRunner) Run() {
 				gr.gameover = false
 				gr.it.ClearState()
 			}
+			if gr.it.Button(20, 3, "Quit") {
+				gr.sshConn.Close()
+			}
 		} else {
 			width := gr.B.Width + 2
 			if width+20 > gr.it.TermW {
@@ -219,7 +225,7 @@ func (gr *GameRunner) Run() {
 					log.Printf("%s won a game!", gr.username)
 					gr.gameover = true
 				}
-				if gr.it.Button(20, 3, "Leave") {
+				if gr.it.Button(20, 3, "New Game") {
 					gr.B = nil
 					gr.it.ClearState()
 					gr.Refresh()
@@ -230,7 +236,7 @@ func (gr *GameRunner) Run() {
 					log.Printf("%s lost a game!", gr.username)
 					gr.gameover = true
 				}
-				if gr.it.Button(20, 3, "Leave") {
+				if gr.it.Button(20, 3, "New Game") {
 					gr.B = nil
 					gr.it.ClearState()
 					gr.Refresh()
@@ -239,9 +245,11 @@ func (gr *GameRunner) Run() {
 				gr.it.Text(20, 3, "Mines", fmt.Sprintf("%d", gr.B.Mines))
 				gr.it.Text(20, 3, "Flags", fmt.Sprintf("%d", gr.B.GetFlags()))
 			}
+			if gr.it.Button(20, 3, "Quit") {
+				gr.sshConn.Close()
+			}
 			gr.it.FinishColumns()
 		}
-
 		gr.it.Finish()
 	}
 }
