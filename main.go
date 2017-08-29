@@ -109,9 +109,9 @@ func NewGameRunner(term *tb.Termbox, sshConn *ssh.ServerConn) sshterm.Term {
 		neww:    80,
 		newh:    40,
 
-		gamewidth:  "30",
-		gameheight: "24",
-		gamemines:  "150",
+		gamewidth:  "8",
+		gameheight: "8",
+		gamemines:  "10",
 		username:   sshConn.User(),
 		sshConn:    sshConn,
 	}
@@ -161,6 +161,24 @@ func (gr *GameRunner) Run() {
 		gr.Term.Resize(gr.neww, gr.newh)
 		gr.it.Start()
 		if gr.B == nil {
+			sel := gr.it.SelectableList(20, 5, "Presets", []string{"Beginner", "Intermediate", "Expert"}, []int{})
+			if len(sel) > 0 {
+				switch sel[0] {
+				case 0:
+					gr.gamewidth = "8"
+					gr.gameheight = "8"
+					gr.gamemines = "10"
+				case 1:
+					gr.gamewidth = "16"
+					gr.gameheight = "16"
+					gr.gamemines = "40"
+				case 2:
+					gr.gamewidth = "24"
+					gr.gameheight = "24"
+					gr.gamemines = "99"
+				}
+			}
+
 			gr.gamewidth = gr.it.Input(10, 3, "Width", gr.gamewidth)
 			gr.it.SameLine()
 			gr.gameheight = gr.it.Input(10, 3, "Height", gr.gameheight)
